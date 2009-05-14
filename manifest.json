@@ -1,0 +1,23 @@
+{
+  "content_scripts": [
+    {
+      "js": [
+        "tableau_client.js"
+      ],
+      "matches": [
+        "http://*/*"
+      ]
+    }
+  ], 
+  "description": "Share on tumblr with no overhead.", 
+  "id": "2B64446C65037A629119D1768D32404298BB2DD7", 
+  "name": "Tableau for chrome", 
+  "permissions": [
+    "http://*.tumblr.com/*", 
+    "https://*.tumblr.com/*"
+  ], 
+  "toolstrips": [
+    "tableau.html"
+  ], 
+  "version": "0.1"
+}
