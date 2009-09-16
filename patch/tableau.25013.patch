@@ -1,0 +1,227 @@
+Index: .gitignore
+===================================================================
+--- .gitignore	(revision 25013)
++++ .gitignore	(working copy)
+@@ -1,6 +1,7 @@
+ *.mk
+ *.ncb
+ *.pyc
++.svn
+ *.scons
+ *.suo
+ *.user
+Index: chrome/app/generated_resources.grd
+===================================================================
+--- chrome/app/generated_resources.grd	(revision 25013)
++++ chrome/app/generated_resources.grd	(working copy)
+@@ -311,6 +311,15 @@
+       </message>
+ 
+       <!-- content area context menus -->
++      <message name="IDS_CONTENT_CONTEXT_TABLEAU_LINK" desc="Share on Tumblr link">
++        Share - Link
++      </message>
++      <message name="IDS_CONTENT_CONTEXT_TABLEAU_QUOTE" desc="Share on Tumblr quote">
++        Share - Quote
++      </message>
++      <message name="IDS_CONTENT_CONTEXT_TABLEAU_PHOTO" desc="Share on Tumblr photo">
++        Share - Photo
++      </message>
+       <message name="IDS_CONTENT_CONTEXT_BACK" desc="The name of the Back command in the content area context menu">
+         &amp;Back
+       </message>
+Index: chrome/browser/extensions/extension_host.cc
+===================================================================
+--- chrome/browser/extensions/extension_host.cc	(revision 25013)
++++ chrome/browser/extensions/extension_host.cc	(working copy)
+@@ -67,7 +67,7 @@
+   view_->Init();
+ #else
+   // TODO(port)
+-  NOTREACHED();
++ // NOTREACHED();
+ #endif
+ }
+ 
+Index: chrome/browser/tab_contents/render_view_context_menu.cc
+===================================================================
+--- chrome/browser/tab_contents/render_view_context_menu.cc	(revision 25013)
++++ chrome/browser/tab_contents/render_view_context_menu.cc	(working copy)
+@@ -30,6 +30,20 @@
+ #include "net/base/net_util.h"
+ #include "webkit/glue/media_player_action.h"
+ 
++#include "base/json_writer.h"
++#include "base/debug_util.h"
++//#include "chrome/common/render_messages_internal.h"
++#include "chrome/common/render_messages.h"
++#include "chrome/common/extensions/extension.h"
++#include "chrome/browser/extensions/extensions_service.h"
++#include "chrome/browser/extensions/extension_message_service.h"
++#include "chrome/browser/worker_host/message_port_dispatcher.h"
++#include "chrome/browser/renderer_host/render_view_host.h"
++#include "chrome/browser/tab_contents/tab_contents_delegate.h"
++#include "chrome/browser/automation/automation_provider_list.h"
++#include "chrome/browser/extensions/extension_tabs_module.h"
++#include "chrome/browser/extensions/extension_tabs_module_constants.h"
++
+ RenderViewContextMenu::RenderViewContextMenu(
+     TabContents* tab_contents,
+     const ContextMenuParams& params)
+@@ -48,8 +62,10 @@
+   DoInit();
+ }
+ 
++const std::string tableau_extension_id = "cdoinchhmmllfnfecinbngpgokdmlpbf";
+ void RenderViewContextMenu::InitMenu(ContextNodeType node_type,
+                                      ContextMenuMediaParams media_params) {
++
+   if (node_type.type & ContextNodeType::PAGE)
+     AppendPageItems();
+   if (node_type.type & ContextNodeType::FRAME)
+@@ -57,6 +73,27 @@
+   if (node_type.type & ContextNodeType::LINK)
+     AppendLinkItems();
+ 
++	bool found = false;
++	const ExtensionList* list = profile_->GetExtensionsService()->extensions();
++	for (ExtensionList::const_iterator iter = list->begin();
++			iter != list->end(); ++iter) {
++		Extension* extension = (*iter);
++		if ( extension->id() == tableau_extension_id ) {
++			found = true;
++			break;
++		}
++	}
++	
++	if ( found ) {
++	  if (node_type.type & ContextNodeType::IMAGE)
++		  AppendMenuItem(IDS_CONTENT_CONTEXT_TABLEAU_PHOTO);
++	  else if (node_type.type & ContextNodeType::SELECTION)
++		  AppendMenuItem(IDS_CONTENT_CONTEXT_TABLEAU_QUOTE);
++	  else
++		  AppendMenuItem(IDS_CONTENT_CONTEXT_TABLEAU_LINK);
++	  AppendSeparator();
++	}
++
+   if (node_type.type & ContextNodeType::IMAGE) {
+     if (node_type.type & ContextNodeType::LINK)
+       AppendSeparator();
+@@ -267,6 +304,10 @@
+ // Menu delegate functions -----------------------------------------------------
+ 
+ bool RenderViewContextMenu::IsItemCommandEnabled(int id) const {
++  if ((id >= IDS_CONTENT_CONTEXT_TABLEAU_LINK) &&
++      (id <= IDS_CONTENT_CONTEXT_TABLEAU_PHOTO)) {
++	  return true;
++  }
+   // Allow Spell Check language items on sub menu for text area context menu.
+   if ((id >= IDC_SPELLCHECK_LANGUAGES_FIRST) &&
+       (id < IDC_SPELLCHECK_LANGUAGES_LAST)) {
+@@ -447,6 +488,65 @@
+       (id - IDC_SPELLCHECK_LANGUAGES_FIRST);
+ }
+ 
++typedef std::vector<Extension*> ExtensionList;
++namespace tab_keys = extension_tabs_module_constants;
++void RenderViewContextMenu::invokeTableau(int type) {
++	// see IDS_CONTENT_CONTEXT_SAVEPAGEAS
++      NavigationEntry* active_entry =
++          source_tab_contents_->controller().GetActiveEntry();
++      GURL page_url = (active_entry) ? active_entry->url() :
++                                          GURL::EmptyGURL();
++	const std::string pageUrl = page_url.spec();
++
++	const string16& _pageTitle = source_tab_contents_->GetTitle();
++	const std::string pageTitle = UTF16ToUTF8(_pageTitle);
++
++	DictionaryValue* ps = new DictionaryValue();
++	ps->SetString((L"page"), pageTitle);
++	ps->SetString((L"pageUrl"), pageUrl);
++
++	if ( type == 0 ) {
++		// link
++		ps->SetString((L"type"), "link");
++	} else if ( type == 1 ) {
++		// quote title+url, quote(text)
++		ps->SetString((L"type"), "quote");
++		const std::wstring& _quote = params_.selection_text;
++		const std::string& quote = WideToUTF8(_quote);
++		ps->SetString((L"body"), quote);
++	} else if ( type == 2 ) {
++		// photo title+url, photo(url)
++		ps->SetString((L"type"), "photo");
++		GURL _imgsrc = params_.src_url;
++		const std::string& imgsrc = _imgsrc.spec();
++		ps->SetString((L"itemUrl"), imgsrc);
++	}
++
++	std::string extension_name = "tableau";
++	std::string page_action_id = "tableauPageAction";
++
++	int tab_id = ExtensionTabUtil::GetTabId(source_tab_contents_);
++
++	ListValue args;
++	args.Append(Value::CreateStringValue(page_action_id));
++	DictionaryValue* data = new DictionaryValue();
++	data->Set(tab_keys::kTabIdKey, Value::CreateIntegerValue(tab_id));
++	data->Set(tab_keys::kTabUrlKey, Value::CreateStringValue(pageUrl));
++	data->Set(L"ps", ps);
++	args.Append(data);
++
++	std::string json_args;
++	JSONWriter::Write(&args, false, &json_args);
++
++	std::string event_name = tableau_extension_id + std::string("/") + page_action_id;
++
++	if (profile_->GetExtensionMessageService()) {
++		profile_->GetExtensionMessageService()->
++			DispatchEventToRenderers(event_name, json_args);
++	}
++
++}
++
+ void RenderViewContextMenu::ExecuteItemCommand(int id) {
+   // Check to see if one of the spell check language ids have been clicked.
+   if (id >= IDC_SPELLCHECK_LANGUAGES_FIRST &&
+@@ -465,6 +565,15 @@
+   }
+ 
+   switch (id) {
++  	case IDS_CONTENT_CONTEXT_TABLEAU_LINK:
++		invokeTableau(0);
++		break;
++    case IDS_CONTENT_CONTEXT_TABLEAU_QUOTE:
++		invokeTableau(1);
++		break;
++    case IDS_CONTENT_CONTEXT_TABLEAU_PHOTO:
++		invokeTableau(2);
++		break;
+     case IDS_CONTENT_CONTEXT_OPENLINKNEWTAB:
+       OpenURL(params_.link_url, NEW_BACKGROUND_TAB, PageTransition::LINK);
+       break;
+Index: chrome/browser/tab_contents/render_view_context_menu.h
+===================================================================
+--- chrome/browser/tab_contents/render_view_context_menu.h	(revision 25013)
++++ chrome/browser/tab_contents/render_view_context_menu.h	(working copy)
+@@ -105,6 +105,7 @@
+   void MediaPlayerActionAt(int x, int y, const MediaPlayerAction& action);
+ 
+   bool IsDevCommandEnabled(int id) const;
++  void RenderViewContextMenu::invokeTableau(int type);
+ 
+   DISALLOW_COPY_AND_ASSIGN(RenderViewContextMenu);
+ };
+Index: chrome/browser/cocoa/about_window_controller.mm
+===================================================================
+--- chrome/browser/cocoa/about_window_controller.mm	(revision 25013)
++++ chrome/browser/cocoa/about_window_controller.mm	(working copy)
+@@ -198,7 +198,7 @@
+   version += L")";
+ #endif
+   NSString* nsversion = base::SysWideToNSString(version);
+-  [version_ setStringValue:nsversion];
++  [version_ setStringValue:[NSString stringWithFormat:@"%s+tableauPatch", nsversion]];
+ 
+   // Put the two images into the ui
+   ResourceBundle& rb = ResourceBundle::GetSharedInstance();

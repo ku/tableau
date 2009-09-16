@@ -1,0 +1,11 @@
+#!/usr/bin/ruby
+
+require 'rubygems'
+require 'json'
+
+f = open('../extension/manifest.json')
+json = JSON.parse(f.read)
+File.rename(
+	'extension.crx', 
+	sprintf("../%s-%s.crx", json['name'], json['version'])
+)

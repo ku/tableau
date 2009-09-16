@@ -1,0 +1,14 @@
+{
+   "background_page": "background.html",
+   "description": "tableau",
+   "key": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDKND7JhFa0NTZOVGANR2Ic0iJc0uOlJfvFGD/7HD67vpyoip4kzIYGzwjXuHaQywD2HMN+6etcgUkp8xCerKWGIX87Z1nga2e3eEb3ZnevhvAG0yUr3VS9UL5et6jvU2xc/GMZP8gjBk0L/QijnDvmZGbS9liOqOWLUFjjtskPvwIDAQAB",
+   "name": "tableau",
+   "page_actions": [ {
+      "icons": [ "music.png" ],
+      "id": "tableauPageAction",
+      "name": "tableau"
+   } ],
+   "permissions": [ "http://www.tumblr.com/*" ],
+   "update_url": "http://ido.nu/kuma/tableau/updates.xml",
+   "version": "0.2.0"
+}

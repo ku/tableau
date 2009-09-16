@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<script type="text/javascript" charset="utf-8" src="js/Base.js"></script>
+<script type="text/javascript" charset="utf-8" src="js/Async.js"></script>
+<script type="text/javascript" charset="utf-8" src="tableau.js"></script>
+<script type="text/javascript">
+
+window.onload = function () {
+
+	chrome.self.onConnect.addListener(function(port) {
+
+		port.onMessage.addListener(function(info,con){
+			//con.postMessage(infos);
+			//con.postMessage({date:timestamp.toLocaleString(),version:version});
+		});
+	});
+
+	chrome.pageActions["tableauPageAction"].addListener(function(action, args) {
+		if ( action != 'tableauPageAction' )
+			return;
+		Tableau.share(args.ps);
+	});
+
+};
+</script>
+</head>
+<body>
+<div id="main">tableau</div>
+</body>
+</html>
